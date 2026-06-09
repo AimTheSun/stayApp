@@ -26,7 +26,12 @@ export default function Auth() {
         }
       }
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Something went wrong.");
+      console.error("auth error", err);
+      setNotice(
+        err instanceof Error
+          ? `${err.name}: ${err.message}`
+          : `Something went wrong: ${String(err)}`,
+      );
     } finally {
       setBusy(false);
     }
