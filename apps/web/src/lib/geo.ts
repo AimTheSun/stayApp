@@ -24,13 +24,8 @@ export interface Fix {
   accuracy: number | null;
 }
 
-/** Wrap the geolocation API in a promise with sane mobile defaults. */
-export function locate(): Promise<Fix> {
+function getPosition(options: PositionOptions): Promise<Fix> {
   return new Promise((resolve, reject) => {
-    if (!("geolocation" in navigator)) {
-      reject(new Error("This device doesn't expose location to the browser."));
-      return;
-    }
     navigator.geolocation.getCurrentPosition(
       (pos) =>
         resolve({
@@ -38,14 +33,41 @@ export function locate(): Promise<Fix> {
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy ?? null,
         }),
-      (err) => {
-        const msg =
-          err.code === err.PERMISSION_DENIED
-            ? "Location is blocked. Allow it in your browser settings and try again."
-            : "Couldn't get a location fix. Try again near a window or outside.";
-        reject(new Error(msg));
-      },
-      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 30_000 },
+      reject,
+      options,
     );
   });
+}
+
+/**
+ * Get a location fix: try high accuracy first, then fall back to a
+ * low-accuracy attempt (desktop browsers without GPS often fail the first).
+ */
+export async function locate(): Promise<Fix> {
+  if (!("geolocation" in navigator)) {
+    throw new Error("This device doesn't expose location to the browser.");
+  }
+  try {
+    return await getPosition({
+      enableHighAccuracy: true,
+      timeout: 12_000,
+      maximumAge: 60_000,
+    });
+  } catch (err) {
+    const geoErr = err as GeolocationPositionError;
+    if (geoErr.code === geoErr.PERMISSION_DENIED) {
+      throw new Error("Location is blocked. Allow it in your browser settings and try again.");
+    }
+    try {
+      return await getPosition({
+        enableHighAccuracy: false,
+        timeout: 20_000,
+        maximumAge: 10 * 60_000,
+      });
+    } catch {
+      throw new Error(
+        "Couldn't get a location fix. Desktop browsers without GPS often can't — try Chrome/Edge, or test on your phone.",
+      );
+    }
+  }
 }
