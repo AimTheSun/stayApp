@@ -3,9 +3,10 @@ import type { Session } from "@supabase/supabase-js";
 import { configured, supabase } from "./lib/supabase";
 import Auth from "./screens/Auth";
 import Home from "./screens/Home";
+import MapScreen from "./screens/Map";
 import History from "./screens/History";
 
-type Tab = "now" | "log";
+type Tab = "now" | "map" | "log";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -53,7 +54,9 @@ export default function App() {
         </button>
       </header>
 
-      <main className="screen">{tab === "now" ? <Home /> : <History />}</main>
+      <main className="screen">
+        {tab === "now" ? <Home /> : tab === "map" ? <MapScreen /> : <History />}
+      </main>
 
       <nav className="tabbar">
         <button
@@ -61,6 +64,12 @@ export default function App() {
           onClick={() => setTab("now")}
         >
           Now
+        </button>
+        <button
+          className={`tab${tab === "map" ? " tab--on" : ""}`}
+          onClick={() => setTab("map")}
+        >
+          Map
         </button>
         <button
           className={`tab${tab === "log" ? " tab--on" : ""}`}
