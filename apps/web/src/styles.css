@@ -436,6 +436,96 @@ code {
   margin: 8px 0 20px;
 }
 
+/* ── Log: summary ── */
+
+.range-tabs {
+  display: inline-flex;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  margin: 8px 0 22px;
+}
+
+.range-tab {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.range-tab--on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.summary {
+  margin-bottom: 30px;
+}
+
+.summary-total {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 52px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 24px;
+}
+
+.summary-empty {
+  margin: 4px 0 0;
+}
+
+.rank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rank-label {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.rank-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: rgba(243, 238, 227, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.rank-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
 .day {
   margin-bottom: 26px;
 }
