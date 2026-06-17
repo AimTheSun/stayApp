@@ -10,5 +10,7 @@ export const configured = Boolean(url && key && !url.includes("YOUR_PROJECT"));
 // Vite dev proxy locally) — keeps phones with filtered networks working.
 export const supabase = createClient(
   configured ? `${window.location.origin}/sb` : "https://placeholder.supabase.co",
-  key ?? "placeholder",
+  // `||` (not `??`) so an empty-string env var also falls back — an empty key
+  // makes createClient throw, which would blank the page before React mounts.
+  key || "placeholder",
 );
