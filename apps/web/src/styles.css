@@ -380,6 +380,42 @@ code {
   color: rgba(151, 144, 127, 0.45);
 }
 
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+  min-height: 20px;
+}
+
+.chip {
+  max-width: 100%;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.chip--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.suggest-loading {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .confirm-actions {
   display: flex;
   flex-direction: column;

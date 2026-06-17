@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { DEFAULT_PLACE_RADIUS_M, haversineM, locate, type Fix } from "../lib/geo";
+import { suggestPlaceNames } from "../lib/places";
 import { formatClock, formatDay, formatDuration, formatTime } from "../lib/format";
 import type { Place, StayRow } from "../types";
 
@@ -14,7 +15,14 @@ type Phase =
   | { k: "loading" }
   | { k: "idle"; notice?: string; error?: boolean }
   | { k: "locating" }
-  | { k: "confirm"; fix: Fix; match: Place | null; saving: boolean }
+  | {
+      k: "confirm";
+      fix: Fix;
+      match: Place | null;
+      saving: boolean;
+      suggestions?: string[];
+      loadingSuggestions?: boolean;
+    }
   | { k: "active"; stay: ActiveStay; leaving: boolean };
 
 export default function Home() {
@@ -65,8 +73,30 @@ export default function Home() {
           match = p;
         }
       }
-      setName(match?.label ?? "");
-      setPhase({ k: "confirm", fix, match, saving: false });
+      if (match) {
+        setName(match.label ?? "");
+        setPhase({ k: "confirm", fix, match, saving: false });
+        return;
+      }
+
+      // New place — show the confirm screen, then suggest names from the map.
+      setName("");
+      setPhase({
+        k: "confirm",
+        fix,
+        match: null,
+        saving: false,
+        suggestions: [],
+        loadingSuggestions: true,
+      });
+      const suggestions = await suggestPlaceNames(fix.lat, fix.lng);
+      setPhase((prev) =>
+        prev.k === "confirm" && !prev.match
+          ? { ...prev, suggestions, loadingSuggestions: false }
+          : prev,
+      );
+      // Pre-fill the best guess only if the user hasn't typed anything.
+      setName((n) => (n.trim() ? n : (suggestions[0] ?? "")));
     } catch (err) {
       setPhase({
         k: "idle",
@@ -177,6 +207,23 @@ export default function Home() {
           autoFocus={!match}
           maxLength={60}
         />
+        {!match && (
+          <div className="suggestions">
+            {phase.loadingSuggestions && (
+              <span className="suggest-loading">Looking around…</span>
+            )}
+            {(phase.suggestions ?? []).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`chip${name === s ? " chip--on" : ""}`}
+                onClick={() => setName(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         <p className="meta">
           {fix.accuracy != null ? `Fix within ±${Math.round(fix.accuracy)} m` : "Location locked"}
           {match ? ` · saved preset, ${Math.round(match.radius_m)} m radius` : " · will be saved as a preset"}
