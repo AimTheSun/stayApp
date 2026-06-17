@@ -5,6 +5,8 @@ import { suggestPlaceNames } from "../lib/places";
 import { formatClock, formatDay, formatDuration, formatTime } from "../lib/format";
 import type { Place, StayRow } from "../types";
 
+const CATEGORIES = ["Home", "Work", "Food", "Friends", "Other"] as const;
+
 interface ActiveStay {
   id: string;
   arrived_at: string;
@@ -28,6 +30,7 @@ type Phase =
 export default function Home() {
   const [phase, setPhase] = useState<Phase>({ k: "loading" });
   const [name, setName] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,12 +78,14 @@ export default function Home() {
       }
       if (match) {
         setName(match.label ?? "");
+        setCategory(match.category ?? null);
         setPhase({ k: "confirm", fix, match, saving: false });
         return;
       }
 
       // New place — show the confirm screen, then suggest names from the map.
       setName("");
+      setCategory(null);
       setPhase({
         k: "confirm",
         fix,
@@ -118,23 +123,19 @@ export default function Home() {
 
       if (match) {
         placeId = match.id;
-        if (label !== match.label) {
-          await supabase.from("places").update({ label }).eq("id", match.id);
-        }
+        const patch: Record<string, unknown> = {};
+        if (label !== match.label) patch.label = label;
+        if (category !== (match.category ?? null)) patch.category = category;
+        if (Object.keys(patch).length > 0) await updatePlace(match.id, patch);
       } else {
-        const { data: created, error } = await supabase
-          .from("places")
-          .insert({
-            user_id: userId,
-            label,
-            lat: fix.lat,
-            lng: fix.lng,
-            radius_m: DEFAULT_PLACE_RADIUS_M,
-          })
-          .select("id")
-          .single();
-        if (error) throw error;
-        placeId = created.id;
+        placeId = await createPlace({
+          user_id: userId,
+          label,
+          lat: fix.lat,
+          lng: fix.lng,
+          radius_m: DEFAULT_PLACE_RADIUS_M,
+          category,
+        });
       }
 
       const arrivedAt = new Date().toISOString();
@@ -228,6 +229,19 @@ export default function Home() {
           {fix.accuracy != null ? `Fix within ±${Math.round(fix.accuracy)} m` : "Location locked"}
           {match ? ` · saved preset, ${Math.round(match.radius_m)} m radius` : " · will be saved as a preset"}
         </p>
+        <div className="cat-picker">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`cat-chip${category === c ? " cat-chip--on" : ""}`}
+              disabled={saving}
+              onClick={() => setCategory((cur) => (cur === c ? null : c))}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
         <div className="confirm-actions">
           <button
             className="btn btn-primary"
@@ -305,4 +319,28 @@ function ActiveView({
 
 function elapsedS(arrivedAt: string): number {
   return (Date.now() - new Date(arrivedAt).getTime()) / 1000;
+}
+
+const missingCategoryColumn = (msg?: string) => !!msg && /category/i.test(msg);
+
+/** Insert a place; retry without `category` if that column isn't migrated yet. */
+async function createPlace(row: Record<string, unknown>): Promise<string> {
+  let res = await supabase.from("places").insert(row).select("id").single();
+  if (res.error && missingCategoryColumn(res.error.message)) {
+    const { category: _omit, ...rest } = row;
+    res = await supabase.from("places").insert(rest).select("id").single();
+  }
+  if (res.error) throw res.error;
+  return (res.data as { id: string }).id;
+}
+
+/** Update a place; retry without `category` if that column isn't migrated yet. */
+async function updatePlace(id: string, patch: Record<string, unknown>) {
+  let res = await supabase.from("places").update(patch).eq("id", id);
+  if (res.error && missingCategoryColumn(res.error.message)) {
+    const { category: _omit, ...rest } = patch;
+    if (Object.keys(rest).length > 0) {
+      res = await supabase.from("places").update(rest).eq("id", id);
+    }
+  }
 }

@@ -90,11 +90,12 @@ export default function MapScreen() {
       const visits = p.visits
         ? ` · ${p.visits} visit${p.visits === 1 ? "" : "s"}`
         : "";
+      const cat = p.category ? `${escapeHtml(p.category)} · ` : "";
       L.marker([p.lat, p.lng], { icon })
         .addTo(map)
         .bindPopup(
           `<div class="map-pop"><strong>${escapeHtml(label)}</strong>` +
-            `<span>${time}${visits}</span></div>`,
+            `<span>${cat}${time}${visits}</span></div>`,
         );
     }
 

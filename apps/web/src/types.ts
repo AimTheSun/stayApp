@@ -5,6 +5,7 @@ export interface Place {
   lat: number;
   lng: number;
   radius_m: number;
+  category?: string | null;
 }
 
 export interface StayRow {
