@@ -5,8 +5,9 @@ import Auth from "./screens/Auth";
 import Home from "./screens/Home";
 import MapScreen from "./screens/Map";
 import History from "./screens/History";
+import Friends from "./screens/Friends";
 
-type Tab = "now" | "map" | "log";
+type Tab = "now" | "map" | "log" | "friends";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -55,7 +56,15 @@ export default function App() {
       </header>
 
       <main className="screen">
-        {tab === "now" ? <Home /> : tab === "map" ? <MapScreen /> : <History />}
+        {tab === "now" ? (
+          <Home />
+        ) : tab === "map" ? (
+          <MapScreen />
+        ) : tab === "log" ? (
+          <History />
+        ) : (
+          <Friends />
+        )}
       </main>
 
       <nav className="tabbar">
@@ -76,6 +85,12 @@ export default function App() {
           onClick={() => setTab("log")}
         >
           Log
+        </button>
+        <button
+          className={`tab${tab === "friends" ? " tab--on" : ""}`}
+          onClick={() => setTab("friends")}
+        >
+          Friends
         </button>
       </nav>
     </div>

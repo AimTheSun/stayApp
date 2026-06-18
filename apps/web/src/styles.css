@@ -839,3 +839,76 @@ code {
 .sheet-delete:hover {
   text-decoration: underline;
 }
+
+/* ── Friends ── */
+
+.friends {
+  padding: 8px 0 32px;
+}
+
+.friends .block {
+  margin-bottom: 28px;
+}
+
+.handle {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  margin: 2px 0 6px;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.input-line {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 0;
+  font-size: 17px;
+  outline: none;
+  border-radius: 0;
+  transition: border-color 0.2s;
+}
+
+.input-line:focus {
+  border-bottom-color: var(--accent);
+}
+
+.input-line::placeholder {
+  color: rgba(151, 144, 127, 0.5);
+}
+
+.btn-sm {
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+.linkish {
+  color: var(--accent);
+  font: inherit;
+  padding: 0;
+}
+
+.linkish:hover {
+  text-decoration: underline;
+}
+
+.friend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.friend-row {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 16px;
+}
