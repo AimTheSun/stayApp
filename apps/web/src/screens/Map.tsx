@@ -169,7 +169,7 @@ export default function MapScreen() {
         setName(p.label ?? "");
         setRadius(Math.round(p.radius_m));
       });
-      const marker = new mapboxgl.Marker({ element: el, anchor: "bottom" })
+      const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat([p.lng, p.lat])
         .addTo(map);
       markersRef.current.push(marker);

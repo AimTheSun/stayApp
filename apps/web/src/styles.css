@@ -703,28 +703,30 @@ code {
 }
 
 /* Marker: gold teardrop pin + a dark name pill to its right. */
+/* The marker box is EXACTLY the dot (20x20) so Mapbox anchors its centre on
+   the coordinate. The label is taken out of flow (absolute) so it never widens
+   the box — otherwise the pin drifts left and swings on zoom. */
 .mb-marker {
   position: relative;
-  display: flex;
-  align-items: center;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
 }
 
 .map-pin-dot {
-  display: block;
-  width: 18px;
-  height: 18px;
-  flex: none;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #f5c66e, var(--accent) 70%);
-  border: 2.5px solid #fff;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .mb-label {
-  margin-left: 7px;
-  margin-bottom: 14px; /* lift clear of the pin tip (anchor: bottom) */
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
   background: rgba(20, 18, 13, 0.9);
   color: var(--ink);
   border-radius: 7px;
