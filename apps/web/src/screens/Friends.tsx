@@ -1,14 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-interface Friend {
-  friend_id: string;
+interface Person {
+  id: string;
   username: string | null;
+  avatar_url: string | null;
+}
+interface Request {
+  from_user: string;
+  username: string | null;
+  avatar_url: string | null;
+}
+
+function Avatar({
+  name,
+  url,
+  size = 44,
+}: {
+  name: string | null;
+  url: string | null;
+  size?: number;
+}) {
+  const initial = (name ?? "?").charAt(0).toUpperCase();
+  return (
+    <span className="avatar" style={{ width: size, height: size }}>
+      {url ? (
+        <img src={url} alt="" />
+      ) : (
+        <span className="avatar-initial">{initial}</span>
+      )}
+    </span>
+  );
 }
 
 export default function Friends() {
-  const [username, setUsername] = useState<string | null>(null);
-  const [friends, setFriends] = useState<Friend[]>([]);
+  const [uid, setUid] = useState<string | null>(null);
+  const [me, setMe] = useState<Person | null>(null);
+  const [friends, setFriends] = useState<Person[]>([]);
+  const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [handleInput, setHandleInput] = useState("");
@@ -20,17 +49,30 @@ export default function Friends() {
   const [addBusy, setAddBusy] = useState(false);
   const [addMsg, setAddMsg] = useState<string | null>(null);
 
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
   async function load() {
     const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
-    const [profileRes, friendsRes] = await Promise.all([
-      uid
-        ? supabase.from("profiles").select("username").eq("id", uid).single()
+    const id = userData.user?.id ?? null;
+    setUid(id);
+    const [profileRes, friendsRes, reqRes] = await Promise.all([
+      id
+        ? supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .eq("id", id)
+            .single()
         : Promise.resolve({ data: null }),
       supabase.rpc("my_friends"),
+      supabase.rpc("incoming_requests"),
     ]);
-    setUsername((profileRes.data as { username?: string } | null)?.username ?? null);
-    setFriends((friendsRes.data as Friend[]) ?? []);
+    setMe((profileRes.data as Person) ?? null);
+    setFriends(
+      ((friendsRes.data as { friend_id: string; username: string | null; avatar_url: string | null }[]) ?? []).map(
+        (f) => ({ id: f.friend_id, username: f.username, avatar_url: f.avatar_url }),
+      ),
+    );
+    setRequests((reqRes.data as Request[]) ?? []);
     setLoading(false);
   }
 
@@ -41,16 +83,32 @@ export default function Friends() {
   async function saveHandle() {
     setHandleBusy(true);
     setHandleErr(null);
-    const { error } = await supabase.rpc("set_username", {
-      p_username: handleInput,
-    });
+    const { error } = await supabase.rpc("set_username", { p_username: handleInput });
     setHandleBusy(false);
     if (error) {
-      setHandleErr(error.message);
+      setHandleErr(
+        /duplicate|unique/i.test(error.message)
+          ? "That handle is taken."
+          : error.message,
+      );
       return;
     }
     setEditingHandle(false);
-    setHandleInput("");
+    await load();
+  }
+
+  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !uid) return;
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${uid}/avatar.${ext}`;
+    const { error } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (error) return;
+    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+    const url = `${pub.publicUrl}?v=${Date.now()}`;
+    await supabase.from("profiles").update({ avatar_url: url }).eq("id", uid);
     await load();
   }
 
@@ -58,7 +116,7 @@ export default function Friends() {
     if (!addInput.trim()) return;
     setAddBusy(true);
     setAddMsg(null);
-    const { data, error } = await supabase.rpc("add_friend", {
+    const { data, error } = await supabase.rpc("send_friend_request", {
       p_username: addInput.trim(),
     });
     setAddBusy(false);
@@ -66,62 +124,114 @@ export default function Friends() {
       setAddMsg(error.message);
       return;
     }
-    const added = (data as Friend[])?.[0];
-    setAddMsg(added ? `Added @${added.username}.` : "Added.");
+    setAddMsg(data === "friend" ? "You're now friends!" : "Request sent.");
     setAddInput("");
+    await load();
+  }
+
+  async function accept(from: string) {
+    await supabase.rpc("accept_friend_request", { p_from: from });
+    await load();
+  }
+  async function decline(from: string) {
+    await supabase.rpc("decline_friend_request", { p_from: from });
+    await load();
+  }
+  async function removeFriend(id: string) {
+    await supabase.rpc("remove_friend", { p_friend: id });
     await load();
   }
 
   if (loading) return <div className="center muted">…</div>;
 
+  const hasHandle = !!me?.username;
+
   return (
     <div className="friends">
       <h2 className="log-title">Friends</h2>
 
-      <section className="block">
-        <p className="eyebrow">Your handle</p>
-        {username && !editingHandle ? (
-          <>
-            <p className="handle">@{username}</p>
-            <p className="meta">
-              Share this so friends can add you.{" "}
+      {/* You */}
+      <section className="me-card">
+        <button
+          className="avatar-btn"
+          onClick={() => fileRef.current?.click()}
+          aria-label="Change photo"
+        >
+          <Avatar name={me?.username ?? null} url={me?.avatar_url ?? null} size={64} />
+          <span className="avatar-edit">＋</span>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={onPickPhoto}
+        />
+        <div className="me-handle">
+          {hasHandle && !editingHandle ? (
+            <>
+              <p className="handle">@{me!.username}</p>
               <button
                 className="linkish"
                 onClick={() => {
                   setEditingHandle(true);
-                  setHandleInput(username);
+                  setHandleInput(me!.username ?? "");
                 }}
               >
-                Change
+                Change handle
               </button>
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="inline-form">
-              <input
-                className="input-line"
-                value={handleInput}
-                onChange={(e) => setHandleInput(e.target.value)}
-                placeholder="pick a handle"
-                autoCapitalize="none"
-                autoCorrect="off"
-                maxLength={20}
-              />
-              <button
-                className="btn btn-primary btn-sm"
-                disabled={handleBusy}
-                onClick={saveHandle}
-              >
-                {handleBusy ? "…" : "Save"}
-              </button>
-            </div>
-            <p className="meta">3–20 chars · letters, numbers, underscore.</p>
-            {handleErr && <p className="notice notice--error">{handleErr}</p>}
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              <div className="inline-form">
+                <input
+                  className="input-line"
+                  value={handleInput}
+                  onChange={(e) => setHandleInput(e.target.value)}
+                  placeholder="pick a handle"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  maxLength={20}
+                />
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={handleBusy}
+                  onClick={saveHandle}
+                >
+                  {handleBusy ? "…" : "Save"}
+                </button>
+              </div>
+              <p className="meta">Unique · 3–20 chars · a–z 0–9 _</p>
+              {handleErr && <p className="notice notice--error">{handleErr}</p>}
+            </>
+          )}
+        </div>
       </section>
 
+      {/* Requests */}
+      {requests.length > 0 && (
+        <section className="block">
+          <p className="eyebrow">Requests</p>
+          <ul className="friend-list">
+            {requests.map((r) => (
+              <li key={r.from_user} className="friend-row req-row">
+                <Avatar name={r.username} url={r.avatar_url} />
+                <span className="friend-name">@{r.username ?? "someone"}</span>
+                <span className="req-actions">
+                  <button className="btn btn-primary btn-xs" onClick={() => accept(r.from_user)}>
+                    Accept
+                  </button>
+                  <button className="btn-text btn-xs" onClick={() => decline(r.from_user)}>
+                    Decline
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Add */}
       <section className="block">
         <p className="eyebrow">Add a friend</p>
         <div className="inline-form">
@@ -136,18 +246,17 @@ export default function Friends() {
           />
           <button
             className="btn btn-primary btn-sm"
-            disabled={addBusy || !username}
+            disabled={addBusy || !hasHandle}
             onClick={addFriend}
           >
-            {addBusy ? "…" : "Add"}
+            {addBusy ? "…" : "Send"}
           </button>
         </div>
-        {!username && (
-          <p className="meta">Pick your own handle first.</p>
-        )}
+        {!hasHandle && <p className="meta">Pick your own handle first.</p>}
         {addMsg && <p className="notice">{addMsg}</p>}
       </section>
 
+      {/* Friends */}
       <section className="block">
         <p className="eyebrow">Your friends</p>
         {friends.length === 0 ? (
@@ -155,8 +264,12 @@ export default function Friends() {
         ) : (
           <ul className="friend-list">
             {friends.map((f) => (
-              <li key={f.friend_id} className="friend-row">
-                @{f.username ?? "friend"}
+              <li key={f.id} className="friend-row">
+                <Avatar name={f.username} url={f.avatar_url} />
+                <span className="friend-name">@{f.username ?? "friend"}</span>
+                <button className="linkish remove" onClick={() => removeFriend(f.id)}>
+                  Remove
+                </button>
               </li>
             ))}
           </ul>

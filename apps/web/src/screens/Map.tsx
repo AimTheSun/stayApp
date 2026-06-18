@@ -12,6 +12,7 @@ interface PlaceWithStats extends Place {
 interface LeaderRow {
   user_id: string;
   name: string;
+  avatar_url: string | null;
   total_s: number;
   is_me: boolean;
 }
@@ -219,9 +220,20 @@ export default function MapScreen() {
               ) : (
                 <ul className="rank">
                   {board.map((r) => (
-                    <li key={r.user_id} className="rank-row">
-                      <span className="rank-label">
-                        {r.is_me ? "You" : `@${r.name}`}
+                    <li key={r.user_id} className="rank-row board-row">
+                      <span className="board-person">
+                        <span className="avatar avatar-sm">
+                          {r.avatar_url ? (
+                            <img src={r.avatar_url} alt="" />
+                          ) : (
+                            <span className="avatar-initial">
+                              {(r.is_me ? "Y" : r.name).charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </span>
+                        <span className="rank-label">
+                          {r.is_me ? "You" : `@${r.name}`}
+                        </span>
                       </span>
                       <span className="rank-time">
                         {formatDuration(r.total_s)}
