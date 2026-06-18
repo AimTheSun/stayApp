@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { configured, supabase } from "./lib/supabase";
 import Auth from "./screens/Auth";
 import Home from "./screens/Home";
-import MapScreen from "./screens/Map";
 import History from "./screens/History";
 import Friends from "./screens/Friends";
 import Splash from "./screens/Splash";
+
+// Mapbox GL is ~2.3 MB — only pull it in when the Map tab is opened.
+const MapScreen = lazy(() => import("./screens/Map"));
 
 type Tab = "now" | "map" | "log" | "friends";
 
@@ -70,7 +72,9 @@ export default function App() {
         {tab === "now" ? (
           <Home />
         ) : tab === "map" ? (
-          <MapScreen />
+          <Suspense fallback={<div className="center muted">…</div>}>
+            <MapScreen />
+          </Suspense>
         ) : tab === "log" ? (
           <History />
         ) : (

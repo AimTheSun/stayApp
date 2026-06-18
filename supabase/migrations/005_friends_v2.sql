@@ -4,8 +4,21 @@
 -- ── Avatars ──
 alter table profiles add column if not exists avatar_url text;
 
--- Let friends (and people you have a pending request with) read your
--- profile name/avatar. Own-profile select policy from 001 still applies (OR'd).
+-- ── Friend requests (pending) — must exist before the policy below ──
+create table if not exists friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  from_user uuid not null references auth.users(id) on delete cascade,
+  to_user uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  check (from_user <> to_user),
+  unique (from_user, to_user)
+);
+
+alter table friend_requests enable row level security;
+create policy "requests visible to parties" on friend_requests for select
+  using (auth.uid() in (from_user, to_user));
+
+-- Let friends (and people you have a pending request with) read your profile.
 drop policy if exists "profiles visible to contacts" on profiles;
 create policy "profiles visible to contacts" on profiles for select using (
   id = auth.uid()
@@ -20,20 +33,6 @@ create policy "profiles visible to contacts" on profiles for select using (
        or (r.to_user = auth.uid() and r.from_user = profiles.id)
   )
 );
-
--- ── Friend requests (pending) ──
-create table if not exists friend_requests (
-  id uuid primary key default gen_random_uuid(),
-  from_user uuid not null references auth.users(id) on delete cascade,
-  to_user uuid not null references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  check (from_user <> to_user),
-  unique (from_user, to_user)
-);
-
-alter table friend_requests enable row level security;
-create policy "requests visible to parties" on friend_requests for select
-  using (auth.uid() in (from_user, to_user));
 
 -- ── Send a request by handle (auto-accepts a reverse pending request) ──
 create or replace function send_friend_request(p_username text)
@@ -84,6 +83,7 @@ begin
     where user_lo = least(v_me, p_friend) and user_hi = greatest(v_me, p_friend);
 end; $$;
 
+drop function if exists incoming_requests();
 create or replace function incoming_requests()
 returns table(from_user uuid, username text, avatar_url text)
 language sql security definer set search_path = public as $$
@@ -95,6 +95,7 @@ language sql security definer set search_path = public as $$
 $$;
 
 -- ── my_friends now returns avatars ──
+drop function if exists my_friends();
 create or replace function my_friends()
 returns table(friend_id uuid, username text, avatar_url text)
 language sql security definer set search_path = public as $$
@@ -107,6 +108,7 @@ language sql security definer set search_path = public as $$
 $$;
 
 -- ── leaderboard now returns avatars ──
+drop function if exists place_leaderboard(double precision, double precision, double precision);
 create or replace function place_leaderboard(
   p_lat double precision, p_lng double precision, p_radius_m double precision
 )

@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: "autoUpdate",
         includeAssets: ["icon.svg", "apple-touch-icon.png"],
+        // Mapbox GL is ~2.3 MB; raise the precache ceiling so the SW includes it.
+        workbox: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
         manifest: {
           name: "Stay",
           short_name: "Stay",

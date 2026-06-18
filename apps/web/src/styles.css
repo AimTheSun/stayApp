@@ -697,15 +697,24 @@ code {
   border-top: 1px solid var(--line);
 }
 
-.leaflet-container {
+.mapboxgl-map {
   background: #e7e3d8;
   font-family: var(--sans);
+}
+
+/* Marker: gold teardrop pin + a dark name pill to its right. */
+.mb-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
 }
 
 .map-pin-dot {
   display: block;
   width: 18px;
   height: 18px;
+  flex: none;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   background: radial-gradient(circle at 35% 30%, #f5c66e, var(--accent) 70%);
@@ -713,73 +722,37 @@ code {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
 }
 
-.map-label.leaflet-tooltip {
+.mb-label {
+  margin-left: 7px;
+  margin-bottom: 14px; /* lift clear of the pin tip (anchor: bottom) */
   background: rgba(20, 18, 13, 0.9);
   color: var(--ink);
-  border: none;
   border-radius: 7px;
   padding: 4px 9px;
   font-size: 12.5px;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   white-space: nowrap;
+  pointer-events: none;
 }
 
-.map-label.leaflet-tooltip::before {
-  display: none;
-}
-
-.leaflet-popup-content-wrapper {
-  background: #221f17;
-  color: var(--ink);
-  border: 1px solid rgba(243, 238, 227, 0.18);
-  border-radius: 10px;
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.7);
-}
-
-.leaflet-popup-tip {
-  background: #221f17;
-  border: 1px solid rgba(243, 238, 227, 0.18);
-}
-
-.leaflet-popup-content {
-  margin: 10px 14px;
-}
-
-.map-pop {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.map-pop strong {
-  font-family: var(--serif);
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.map-pop span {
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.leaflet-popup-close-button {
-  color: var(--muted) !important;
-}
-
-.leaflet-control-zoom a {
+/* Mapbox controls, restyled to suit the light map. */
+.mapboxgl-ctrl-group {
   background: #fff !important;
-  color: #1c1a16 !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 9px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18) !important;
 }
 
-.leaflet-control-attribution {
+.mapboxgl-ctrl-group button + button {
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.mapboxgl-ctrl-attrib {
   background: rgba(255, 255, 255, 0.8) !important;
-  color: #6b6760 !important;
+  font-size: 10px;
 }
 
-.leaflet-control-attribution a {
+.mapboxgl-ctrl-attrib a {
   color: #6b6760 !important;
 }
 

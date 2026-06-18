@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import L from "leaflet";
+import mapboxgl from "mapbox-gl";
 import { supabase } from "../lib/supabase";
 import { formatDuration } from "../lib/format";
 import { colorForName } from "../lib/avatarColor";
@@ -20,6 +20,23 @@ interface LeaderRow {
 
 const ACCENT = "#e8b14e";
 
+// Public Mapbox token comes from the build env (apps/web/.env, gitignored) so
+// it never lives in source. Restrict it by URL in the Mapbox dashboard.
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
+
+// A circle polygon (lng/lat ring) of a given radius in metres — Mapbox has no
+// native metres-radius circle, so we approximate one as GeoJSON.
+function circleRing(lat: number, lng: number, radiusM: number, steps = 64) {
+  const coords: [number, number][] = [];
+  const latR = (radiusM / 6371000) * (180 / Math.PI);
+  const lngR = latR / Math.cos((lat * Math.PI) / 180);
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * 2 * Math.PI;
+    coords.push([lng + lngR * Math.cos(t), lat + latR * Math.sin(t)]);
+  }
+  return coords;
+}
+
 export default function MapScreen() {
   const [places, setPlaces] = useState<PlaceWithStats[] | null>(null);
   const [selected, setSelected] = useState<PlaceWithStats | null>(null);
@@ -29,7 +46,9 @@ export default function MapScreen() {
   const [board, setBoard] = useState<LeaderRow[] | null>(null);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     const [placesRes, staysRes] = await Promise.all([
@@ -65,66 +84,106 @@ export default function MapScreen() {
     void load();
   }, [load]);
 
-  // Build the Leaflet map whenever the places change.
+  // Create the Mapbox map once, when the container is mounted.
   useEffect(() => {
-    if (!mapEl.current || !places || places.length === 0) return;
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
+    if (!mapEl.current || mapRef.current) return;
 
-    const map = L.map(mapEl.current, { zoomControl: false });
+    const map = new mapboxgl.Map({
+      container: mapEl.current,
+      style: "mapbox://styles/mapbox/standard",
+      center: [-9.1393, 38.7223], // Lisbon, until places load
+      zoom: 12,
+      pitch: 0,
+      attributionControl: false,
+    });
     mapRef.current = map;
 
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 20 },
-    ).addTo(map);
-    L.control.zoom({ position: "bottomright" }).addTo(map);
+    map.addControl(
+      new mapboxgl.NavigationControl({ showCompass: false }),
+      "bottom-right",
+    );
+    map.addControl(
+      new mapboxgl.AttributionControl({ compact: true }),
+      "bottom-left",
+    );
 
-    const icon = L.divIcon({
-      className: "map-pin",
-      html: '<span class="map-pin-dot"></span>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+    map.on("load", () => {
+      map.addSource("rings", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "rings-fill",
+        type: "fill",
+        source: "rings",
+        paint: { "fill-color": ACCENT, "fill-opacity": 0.1 },
+      });
+      map.addLayer({
+        id: "rings-line",
+        type: "line",
+        source: "rings",
+        paint: { "line-color": ACCENT, "line-width": 1.5, "line-opacity": 0.5 },
+      });
+      setReady(true);
     });
-
-    const points: [number, number][] = [];
-    for (const p of places) {
-      points.push([p.lat, p.lng]);
-      L.circle([p.lat, p.lng], {
-        radius: p.radius_m,
-        color: ACCENT,
-        weight: 1,
-        opacity: 0.4,
-        fillColor: ACCENT,
-        fillOpacity: 0.08,
-      }).addTo(map);
-
-      L.marker([p.lat, p.lng], { icon })
-        .addTo(map)
-        .bindTooltip(p.label ?? "Unnamed spot", {
-          permanent: true,
-          direction: "right",
-          offset: [11, 0],
-          className: "map-label",
-        })
-        .on("click", () => {
-          setSelected(p);
-          setName(p.label ?? "");
-          setRadius(Math.round(p.radius_m));
-        });
-    }
-
-    if (points.length === 1) map.setView(points[0], 15);
-    else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
-    setTimeout(() => map.invalidateSize(), 0);
 
     return () => {
       map.remove();
       mapRef.current = null;
+      setReady(false);
     };
-  }, [places]);
+  }, []);
+
+  // Draw markers + rings whenever the places (or map readiness) change.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !places) return;
+
+    // Refresh ring polygons.
+    const src = map.getSource("rings") as mapboxgl.GeoJSONSource | undefined;
+    src?.setData({
+      type: "FeatureCollection",
+      features: places.map((p) => ({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "Polygon",
+          coordinates: [circleRing(p.lat, p.lng, p.radius_m)],
+        },
+      })),
+    });
+
+    // Replace markers.
+    for (const m of markersRef.current) m.remove();
+    markersRef.current = [];
+
+    for (const p of places) {
+      const el = document.createElement("div");
+      el.className = "mb-marker";
+      el.innerHTML =
+        '<span class="map-pin-dot"></span>' +
+        `<span class="mb-label">${(p.label ?? "Unnamed spot").replace(/</g, "&lt;")}</span>`;
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setSelected(p);
+        setName(p.label ?? "");
+        setRadius(Math.round(p.radius_m));
+      });
+      const marker = new mapboxgl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([p.lng, p.lat])
+        .addTo(map);
+      markersRef.current.push(marker);
+    }
+
+    // Frame the places.
+    if (places.length === 1) {
+      map.easeTo({ center: [places[0].lng, places[0].lat], zoom: 15.5 });
+    } else if (places.length > 1) {
+      const b = new mapboxgl.LngLatBounds();
+      for (const p of places) b.extend([p.lng, p.lat]);
+      map.fitBounds(b, { padding: 64, maxZoom: 16, duration: 600 });
+    }
+  }, [places, ready]);
 
   // Load the friends-only leaderboard for the selected place.
   useEffect(() => {
@@ -179,24 +238,16 @@ export default function MapScreen() {
     await load();
   }
 
-  if (places === null) return <div className="center muted">…</div>;
-
-  if (places.length === 0) {
-    return (
-      <div className="center">
-        <p className="empty-title">No places yet.</p>
-        <p className="muted">Check in somewhere and it'll show up on the map.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="map-screen">
       <div className="map-head">
         <h2 className="log-title map-title">Your places</h2>
         <p className="meta map-sub">
-          {places.length} place{places.length === 1 ? "" : "s"} · tap a marker to
-          edit
+          {places === null
+            ? "Loading…"
+            : places.length === 0
+              ? "Check in somewhere and it'll show up here."
+              : `${places.length} place${places.length === 1 ? "" : "s"} · tap a marker to edit`}
         </p>
       </div>
       <div className="map-canvas" ref={mapEl} />
