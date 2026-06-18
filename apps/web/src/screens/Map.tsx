@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { supabase } from "../lib/supabase";
 import { formatDuration } from "../lib/format";
+import { colorForName } from "../lib/avatarColor";
 import type { Place } from "../types";
 
 interface PlaceWithStats extends Place {
@@ -76,8 +77,8 @@ export default function MapScreen() {
     mapRef.current = map;
 
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 },
+      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 20 },
     ).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
@@ -102,6 +103,12 @@ export default function MapScreen() {
 
       L.marker([p.lat, p.lng], { icon })
         .addTo(map)
+        .bindTooltip(p.label ?? "Unnamed spot", {
+          permanent: true,
+          direction: "right",
+          offset: [11, 0],
+          className: "map-label",
+        })
         .on("click", () => {
           setSelected(p);
           setName(p.label ?? "");
@@ -219,39 +226,46 @@ export default function MapScreen() {
                 <p className="muted board-msg">No time logged here yet.</p>
               ) : (
                 <ul className="rank">
-                  {board.map((r) => (
-                    <li key={r.user_id} className="rank-row board-row">
-                      <span className="board-person">
-                        <span className="avatar avatar-sm">
-                          {r.avatar_url ? (
-                            <img src={r.avatar_url} alt="" />
-                          ) : (
-                            <span className="avatar-initial">
-                              {(r.is_me ? "Y" : r.name).charAt(0).toUpperCase()}
-                            </span>
-                          )}
+                  {board.map((r) => {
+                    const c = colorForName(r.is_me ? "you" : r.name);
+                    return (
+                      <li key={r.user_id} className="rank-row board-row">
+                        <span className="board-person">
+                          <span
+                            className="avatar avatar-sm"
+                            style={{ borderColor: c, borderWidth: 2 }}
+                          >
+                            {r.avatar_url ? (
+                              <img src={r.avatar_url} alt="" />
+                            ) : (
+                              <span className="avatar-initial" style={{ color: c }}>
+                                {(r.is_me ? "Y" : r.name).charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </span>
+                          <span className="rank-label">
+                            {r.is_me ? "You" : `@${r.name}`}
+                          </span>
                         </span>
-                        <span className="rank-label">
-                          {r.is_me ? "You" : `@${r.name}`}
+                        <span className="rank-time">
+                          {formatDuration(r.total_s)}
                         </span>
-                      </span>
-                      <span className="rank-time">
-                        {formatDuration(r.total_s)}
-                      </span>
-                      <span className="rank-bar">
-                        <span
-                          className="rank-bar-fill"
-                          style={{
-                            width: `${
-                              board[0].total_s
-                                ? Math.max(4, (r.total_s / board[0].total_s) * 100)
-                                : 0
-                            }%`,
-                          }}
-                        />
-                      </span>
-                    </li>
-                  ))}
+                        <span className="rank-bar">
+                          <span
+                            className="rank-bar-fill"
+                            style={{
+                              width: `${
+                                board[0].total_s
+                                  ? Math.max(4, (r.total_s / board[0].total_s) * 100)
+                                  : 0
+                              }%`,
+                              background: c,
+                            }}
+                          />
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

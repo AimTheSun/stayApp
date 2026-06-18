@@ -9,6 +9,7 @@
   --muted: #97907f;
   --accent: #e8b14e;
   --accent-ink: #1a1407;
+  --accent2: #ff6b4a;
   --error: #e0654f;
   --serif: "Fraunces Variable", Georgia, serif;
   --sans: "Inter Variable", -apple-system, system-ui, sans-serif;
@@ -697,18 +698,35 @@ code {
 }
 
 .leaflet-container {
-  background: var(--surface);
+  background: #e7e3d8;
   font-family: var(--sans);
 }
 
 .map-pin-dot {
   display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
   background: radial-gradient(circle at 35% 30%, #f5c66e, var(--accent) 70%);
-  border: 2px solid var(--bg);
-  box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.5);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.map-label.leaflet-tooltip {
+  background: rgba(20, 18, 13, 0.9);
+  color: var(--ink);
+  border: none;
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+.map-label.leaflet-tooltip::before {
+  display: none;
 }
 
 .leaflet-popup-content-wrapper {
@@ -751,18 +769,18 @@ code {
 }
 
 .leaflet-control-zoom a {
-  background: var(--surface) !important;
-  color: var(--ink) !important;
-  border-color: var(--line) !important;
+  background: #fff !important;
+  color: #1c1a16 !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
 .leaflet-control-attribution {
-  background: rgba(14, 13, 11, 0.7) !important;
-  color: var(--muted) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: #6b6760 !important;
 }
 
 .leaflet-control-attribution a {
-  color: var(--muted) !important;
+  color: #6b6760 !important;
 }
 
 /* ── Place editor sheet ── */
@@ -1042,4 +1060,90 @@ code {
   align-items: center;
   gap: 9px;
   min-width: 0;
+}
+
+/* ── Splash ── */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background:
+    radial-gradient(120% 80% at 50% 18%, rgba(232, 177, 78, 0.08), transparent 60%),
+    var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  animation: splashOut 0.45s ease 1.3s forwards;
+}
+
+.splash-mark {
+  display: inline-flex;
+  align-items: flex-end;
+}
+
+.splash-word {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 66px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0;
+  animation: splashWord 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.25s forwards;
+}
+
+.splash-pin {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  margin: 0 0 13px 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f5c66e, var(--accent) 70%);
+  opacity: 0;
+  animation: splashPin 0.7s cubic-bezier(0.3, 1.5, 0.5, 1) 0.2s forwards;
+}
+
+.splash-pin-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: splashRipple 0.9s ease-out 0.85s forwards;
+}
+
+.splash-tag {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0;
+  animation: splashWord 0.8s ease 0.55s forwards;
+}
+
+@keyframes splashWord {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes splashPin {
+  from { opacity: 0; transform: translateY(-72px); }
+  70% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes splashRipple {
+  from { opacity: 0.7; transform: scale(0.4); }
+  to { opacity: 0; transform: scale(3.4); }
+}
+@keyframes splashOut {
+  to { opacity: 0; visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-word,
+  .splash-pin,
+  .splash-tag { animation: none; opacity: 1; transform: none; }
+  .splash-pin-ripple { display: none; }
+  .splash { animation: splashOut 0.3s ease 1s forwards; }
 }

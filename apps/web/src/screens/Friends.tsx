@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { colorForName } from "../lib/avatarColor";
 
 interface Person {
   id: string;
@@ -22,12 +23,18 @@ function Avatar({
   size?: number;
 }) {
   const initial = (name ?? "?").charAt(0).toUpperCase();
+  const ring = colorForName(name);
   return (
-    <span className="avatar" style={{ width: size, height: size }}>
+    <span
+      className="avatar"
+      style={{ width: size, height: size, borderColor: ring, borderWidth: 2 }}
+    >
       {url ? (
         <img src={url} alt="" />
       ) : (
-        <span className="avatar-initial">{initial}</span>
+        <span className="avatar-initial" style={{ color: ring }}>
+          {initial}
+        </span>
       )}
     </span>
   );

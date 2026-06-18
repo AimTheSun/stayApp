@@ -6,6 +6,7 @@ import Home from "./screens/Home";
 import MapScreen from "./screens/Map";
 import History from "./screens/History";
 import Friends from "./screens/Friends";
+import Splash from "./screens/Splash";
 
 type Tab = "now" | "map" | "log" | "friends";
 
@@ -13,6 +14,12 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>("now");
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowSplash(false), 1700);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (!configured) {
@@ -26,6 +33,8 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const splash = showSplash ? <Splash /> : null;
 
   if (!configured) {
     return (
@@ -41,11 +50,13 @@ export default function App() {
     );
   }
 
-  if (!ready) return <div className="center muted">…</div>;
-  if (!session) return <Auth />;
+  if (!ready) return <>{splash}<div className="center muted">…</div></>;
+  if (!session) return <>{splash}<Auth /></>;
 
   return (
-    <div className="shell">
+    <>
+      {splash}
+      <div className="shell">
       <header className="topbar">
         <span className="wordmark">
           Stay<span className="brand-dot">.</span>
@@ -93,6 +104,7 @@ export default function App() {
           Friends
         </button>
       </nav>
-    </div>
+      </div>
+    </>
   );
 }
