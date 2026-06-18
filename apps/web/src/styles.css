@@ -764,3 +764,78 @@ code {
 .leaflet-control-attribution a {
   color: var(--muted) !important;
 }
+
+/* ── Place editor sheet ── */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 7, 5, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 24px calc(24px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.sheet-name {
+  font-size: 26px;
+  text-align: left;
+  margin-top: 6px;
+}
+
+.sheet-radius {
+  display: block;
+  margin-top: 24px;
+}
+
+.sheet-radius-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.sheet-radius-label strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-radius input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.sheet-actions .btn-primary {
+  flex: 1;
+}
+
+.sheet-delete {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--error);
+}
+
+.sheet-delete:hover {
+  text-decoration: underline;
+}
