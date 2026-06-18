@@ -9,6 +9,13 @@ interface PlaceWithStats extends Place {
   visits: number;
 }
 
+interface LeaderRow {
+  user_id: string;
+  name: string;
+  total_s: number;
+  is_me: boolean;
+}
+
 const ACCENT = "#e8b14e";
 
 export default function MapScreen() {
@@ -17,6 +24,7 @@ export default function MapScreen() {
   const [name, setName] = useState("");
   const [radius, setRadius] = useState(100);
   const [busy, setBusy] = useState(false);
+  const [board, setBoard] = useState<LeaderRow[] | null>(null);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -110,6 +118,34 @@ export default function MapScreen() {
     };
   }, [places]);
 
+  // Load the friends-only leaderboard for the selected place.
+  useEffect(() => {
+    if (!selected) {
+      setBoard(null);
+      return;
+    }
+    let cancelled = false;
+    setBoard(null);
+    supabase
+      .rpc("place_leaderboard", {
+        p_lat: selected.lat,
+        p_lng: selected.lng,
+        p_radius_m: selected.radius_m,
+      })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setBoard(
+          ((data as LeaderRow[]) ?? []).map((r) => ({
+            ...r,
+            total_s: Number(r.total_s),
+          })),
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
   const close = () => setSelected(null);
 
   async function save() {
@@ -173,6 +209,40 @@ export default function MapScreen() {
               placeholder="Name this place"
               maxLength={60}
             />
+
+            <div className="board">
+              <p className="eyebrow board-title">Who's been here</p>
+              {board === null ? (
+                <p className="muted board-msg">…</p>
+              ) : board.length === 0 ? (
+                <p className="muted board-msg">No time logged here yet.</p>
+              ) : (
+                <ul className="rank">
+                  {board.map((r) => (
+                    <li key={r.user_id} className="rank-row">
+                      <span className="rank-label">
+                        {r.is_me ? "You" : `@${r.name}`}
+                      </span>
+                      <span className="rank-time">
+                        {formatDuration(r.total_s)}
+                      </span>
+                      <span className="rank-bar">
+                        <span
+                          className="rank-bar-fill"
+                          style={{
+                            width: `${
+                              board[0].total_s
+                                ? Math.max(4, (r.total_s / board[0].total_s) * 100)
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <label className="sheet-radius">
               <span className="sheet-radius-label">

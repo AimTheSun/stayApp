@@ -793,6 +793,19 @@ code {
   margin-top: 6px;
 }
 
+.board {
+  margin-top: 20px;
+}
+
+.board-title {
+  margin-bottom: 12px;
+}
+
+.board-msg {
+  font-size: 14px;
+  margin: 0;
+}
+
 .sheet-radius {
   display: block;
   margin-top: 24px;
