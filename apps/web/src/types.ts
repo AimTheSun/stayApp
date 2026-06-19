@@ -6,6 +6,7 @@ export interface Place {
   lng: number;
   radius_m: number;
   category?: string | null;
+  hidden_from_friends?: boolean | null;
 }
 
 export interface StayRow {

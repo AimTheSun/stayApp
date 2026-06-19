@@ -753,6 +753,10 @@ code {
   padding: 8px 0 0;
 }
 
+.map-toggle {
+  margin: 12px 0 0;
+}
+
 .map-title {
   margin: 0 0 2px;
 }
@@ -811,6 +815,40 @@ code {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* Friends' places: their avatar, ringed in their colour. */
+.mb-marker--friend {
+  width: 34px;
+  height: 34px;
+}
+
+.mb-avatar {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 2.5px solid var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.mb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mb-avatar-initial {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.mb-marker--friend .mb-label {
+  font-weight: 600;
 }
 
 /* Mapbox controls, restyled to suit the light map. */
@@ -912,11 +950,87 @@ code {
   accent-color: var(--accent);
 }
 
+.sheet-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.sheet-toggle > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sheet-toggle strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sheet-toggle-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.sheet-toggle input[type="checkbox"] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+
+/* Friend's place sheet header */
+.friend-place-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 4px;
+}
+
+.friend-place-head .avatar {
+  width: 52px;
+  height: 52px;
+}
+
+.friend-place-head .avatar-initial {
+  font-size: 22px;
+}
+
+.friend-place-meta {
+  min-width: 0;
+}
+
+.sheet-place-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-place-time {
+  margin: 14px 0 0;
+}
+
 .sheet-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 28px;
+}
+
+.sheet-actions .btn-primary:only-child {
+  flex: 1;
 }
 
 .sheet-actions .btn-primary {
