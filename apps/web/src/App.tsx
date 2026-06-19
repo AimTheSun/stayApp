@@ -6,6 +6,7 @@ import Home from "./screens/Home";
 import History from "./screens/History";
 import Friends from "./screens/Friends";
 import Splash from "./screens/Splash";
+import Onboarding from "./screens/Onboarding";
 
 // Mapbox GL is ~2.3 MB — only pull it in when the Map tab is opened.
 const MapScreen = lazy(() => import("./screens/Map"));
@@ -17,6 +18,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>("now");
   const [showSplash, setShowSplash] = useState(true);
+  // null = unknown yet; once a session exists we learn if they've onboarded.
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setShowSplash(false), 1700);
@@ -36,6 +39,28 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Whenever we have a session, find out whether the profile is set up.
+  useEffect(() => {
+    if (!session) {
+      setOnboarded(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("onboarded")
+      .eq("id", session.user.id)
+      .single()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        // If the column isn't there yet (pre-migration), don't block the app.
+        setOnboarded(error ? true : Boolean(data?.onboarded));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
   const splash = showSplash ? <Splash /> : null;
 
   if (!configured) {
@@ -54,6 +79,14 @@ export default function App() {
 
   if (!ready) return <>{splash}<div className="center muted">…</div></>;
   if (!session) return <>{splash}<Auth /></>;
+  if (onboarded === null) return <>{splash}<div className="center muted">…</div></>;
+  if (!onboarded)
+    return (
+      <>
+        {splash}
+        <Onboarding onDone={() => setOnboarded(true)} />
+      </>
+    );
 
   return (
     <>

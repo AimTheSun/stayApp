@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { colorForName } from "../lib/avatarColor";
+import { INTERESTS } from "../lib/interests";
+import Avatar from "../components/Avatar";
+import ProfileView from "../components/ProfileView";
 
+interface Me {
+  id: string;
+  username: string | null;
+  avatar_url: string | null;
+  region: string | null;
+  interests: string[] | null;
+  bio: string | null;
+}
 interface Person {
   id: string;
   username: string | null;
   avatar_url: string | null;
+  region?: string | null;
 }
 interface Request {
   from_user: string;
@@ -13,67 +24,62 @@ interface Request {
   avatar_url: string | null;
 }
 
-function Avatar({
-  name,
-  url,
-  size = 44,
-}: {
-  name: string | null;
-  url: string | null;
-  size?: number;
-}) {
-  const initial = (name ?? "?").charAt(0).toUpperCase();
-  const ring = colorForName(name);
-  return (
-    <span
-      className="avatar"
-      style={{ width: size, height: size, borderColor: ring, borderWidth: 2 }}
-    >
-      {url ? (
-        <img src={url} alt="" />
-      ) : (
-        <span className="avatar-initial" style={{ color: ring }}>
-          {initial}
-        </span>
-      )}
-    </span>
-  );
-}
-
 export default function Friends() {
   const [uid, setUid] = useState<string | null>(null);
-  const [me, setMe] = useState<Person | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [friends, setFriends] = useState<Person[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [handleInput, setHandleInput] = useState("");
-  const [editingHandle, setEditingHandle] = useState(false);
-  const [handleBusy, setHandleBusy] = useState(false);
-  const [handleErr, setHandleErr] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Person[] | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
 
-  const [addInput, setAddInput] = useState("");
-  const [addBusy, setAddBusy] = useState(false);
-  const [addMsg, setAddMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [eRegion, setERegion] = useState("");
+  const [eInterests, setEInterests] = useState<string[]>([]);
+  const [eBio, setEBio] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [wipeConfirm, setWipeConfirm] = useState(false);
+  const [wiping, setWiping] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function loadProfile(id: string) {
+    // Try the full profile; fall back to base columns if 007 isn't applied yet.
+    const full = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url, region, interests, bio")
+      .eq("id", id)
+      .single();
+    if (!full.error) return full.data as Me;
+    const base = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .eq("id", id)
+      .single();
+    return base.data
+      ? ({ ...(base.data as Person), region: null, interests: null, bio: null } as Me)
+      : null;
+  }
 
   async function load() {
     const { data: userData } = await supabase.auth.getUser();
     const id = userData.user?.id ?? null;
     setUid(id);
-    const [profileRes, friendsRes, reqRes] = await Promise.all([
-      id
-        ? supabase
-            .from("profiles")
-            .select("id, username, avatar_url")
-            .eq("id", id)
-            .single()
-        : Promise.resolve({ data: null }),
+    const [mine, friendsRes, reqRes] = await Promise.all([
+      id ? loadProfile(id) : Promise.resolve(null),
       supabase.rpc("my_friends"),
       supabase.rpc("incoming_requests"),
     ]);
-    setMe((profileRes.data as Person) ?? null);
+    setMe(mine);
+    if (mine) {
+      setERegion(mine.region ?? "");
+      setEInterests(mine.interests ?? []);
+      setEBio(mine.bio ?? "");
+    }
     setFriends(
       ((friendsRes.data as { friend_id: string; username: string | null; avatar_url: string | null }[]) ?? []).map(
         (f) => ({ id: f.friend_id, username: f.username, avatar_url: f.avatar_url }),
@@ -87,22 +93,19 @@ export default function Friends() {
     void load();
   }, []);
 
-  async function saveHandle() {
-    setHandleBusy(true);
-    setHandleErr(null);
-    const { error } = await supabase.rpc("set_username", { p_username: handleInput });
-    setHandleBusy(false);
-    if (error) {
-      setHandleErr(
-        /duplicate|unique/i.test(error.message)
-          ? "That handle is taken."
-          : error.message,
-      );
+  // Debounced people search.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults(null);
       return;
     }
-    setEditingHandle(false);
-    await load();
-  }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.rpc("search_profiles", { p_q: q });
+      setResults((data as Person[]) ?? []);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -112,40 +115,42 @@ export default function Friends() {
     const { error } = await supabase.storage
       .from("avatars")
       .upload(path, file, { upsert: true, contentType: file.type });
-    if (error) return;
-    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
-    const url = `${pub.publicUrl}?v=${Date.now()}`;
+    if (error) {
+      setToast("Couldn't upload that photo.");
+      return;
+    }
+    // Store the canonical Supabase public URL (origin-independent) so the photo
+    // loads on every device — NOT the per-origin /sb proxy URL.
+    const base = import.meta.env.VITE_SUPABASE_URL as string;
+    const url = `${base}/storage/v1/object/public/avatars/${path}?v=${Date.now()}`;
     await supabase.from("profiles").update({ avatar_url: url }).eq("id", uid);
     await load();
   }
 
-  async function addFriend() {
-    if (!addInput.trim()) return;
-    setAddBusy(true);
-    setAddMsg(null);
-    const { data, error } = await supabase.rpc("send_friend_request", {
-      p_username: addInput.trim(),
+  function toggleInterest(i: string) {
+    setEInterests((cur) =>
+      cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i],
+    );
+  }
+
+  async function saveProfile() {
+    setSaving(true);
+    await supabase.rpc("save_profile", {
+      p_region: eRegion,
+      p_interests: eInterests,
+      p_bio: eBio,
     });
-    setAddBusy(false);
-    if (error) {
-      setAddMsg(error.message);
-      return;
-    }
-    setAddMsg(data === "friend" ? "You're now friends!" : "Request sent.");
-    setAddInput("");
+    setSaving(false);
+    setEditing(false);
     await load();
   }
 
-  async function accept(from: string) {
-    await supabase.rpc("accept_friend_request", { p_from: from });
-    await load();
-  }
-  async function decline(from: string) {
-    await supabase.rpc("decline_friend_request", { p_from: from });
-    await load();
-  }
-  async function removeFriend(id: string) {
-    await supabase.rpc("remove_friend", { p_friend: id });
+  async function wipeData() {
+    setWiping(true);
+    await supabase.rpc("delete_my_data");
+    setWiping(false);
+    setWipeConfirm(false);
+    setToast("Your places and stays were deleted.");
     await load();
   }
 
@@ -167,52 +172,92 @@ export default function Friends() {
           <Avatar name={me?.username ?? null} url={me?.avatar_url ?? null} size={64} />
           <span className="avatar-edit">＋</span>
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={onPickPhoto}
-        />
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
         <div className="me-handle">
-          {hasHandle && !editingHandle ? (
-            <>
-              <p className="handle">@{me!.username}</p>
-              <button
-                className="linkish"
-                onClick={() => {
-                  setEditingHandle(true);
-                  setHandleInput(me!.username ?? "");
-                }}
-              >
-                Change handle
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="inline-form">
-                <input
-                  className="input-line"
-                  value={handleInput}
-                  onChange={(e) => setHandleInput(e.target.value)}
-                  placeholder="pick a handle"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  maxLength={20}
-                />
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={handleBusy}
-                  onClick={saveHandle}
-                >
-                  {handleBusy ? "…" : "Save"}
-                </button>
-              </div>
-              <p className="meta">Unique · 3–20 chars · a–z 0–9 _</p>
-              {handleErr && <p className="notice notice--error">{handleErr}</p>}
-            </>
-          )}
+          <p className="handle">{hasHandle ? `@${me!.username}` : "Set up your profile"}</p>
+          {me?.region && <p className="meta me-region">📍 {me.region}</p>}
+          <button className="linkish" onClick={() => setEditing((v) => !v)}>
+            {editing ? "Close" : "Edit profile"}
+          </button>
         </div>
+      </section>
+
+      {/* Edit profile */}
+      {editing && (
+        <section className="block edit-profile">
+          <label className="field">
+            <span className="field-label">Region</span>
+            <input
+              className="input-line"
+              value={eRegion}
+              onChange={(e) => setERegion(e.target.value)}
+              placeholder="e.g. Lisbon, Portugal"
+              maxLength={60}
+            />
+          </label>
+          <p className="field-label edit-label">Interests</p>
+          <div className="onboard-chips">
+            {INTERESTS.map((i) => (
+              <button
+                key={i}
+                type="button"
+                className={`chip${eInterests.includes(i) ? " chip--on" : ""}`}
+                onClick={() => toggleInterest(i)}
+              >
+                {i}
+              </button>
+            ))}
+          </div>
+          <label className="field edit-bio">
+            <span className="field-label">Bio</span>
+            <input
+              className="input-line"
+              value={eBio}
+              onChange={(e) => setEBio(e.target.value)}
+              placeholder="A line about you"
+              maxLength={120}
+            />
+          </label>
+          <button className="btn btn-primary btn-sm" disabled={saving} onClick={saveProfile}>
+            {saving ? "Saving…" : "Save profile"}
+          </button>
+        </section>
+      )}
+
+      {/* Search */}
+      <section className="block">
+        <p className="eyebrow">Find people</p>
+        <div className="inline-form">
+          <input
+            className="input-line"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="search a handle"
+            autoCapitalize="none"
+            autoCorrect="off"
+            maxLength={20}
+            disabled={!hasHandle}
+          />
+        </div>
+        {!hasHandle && <p className="meta">Pick your own handle first (Edit profile).</p>}
+        {results && (
+          <ul className="friend-list search-results">
+            {results.length === 0 ? (
+              <li className="meta search-empty">No one found.</li>
+            ) : (
+              results.map((r) => (
+                <li key={r.id} className="friend-row tappable" onClick={() => setViewing(r.id)}>
+                  <Avatar name={r.username} url={r.avatar_url} />
+                  <span className="friend-name">
+                    @{r.username ?? "someone"}
+                    {r.region && <span className="friend-sub"> · {r.region}</span>}
+                  </span>
+                  <span className="row-chevron">›</span>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
       </section>
 
       {/* Requests */}
@@ -221,67 +266,78 @@ export default function Friends() {
           <p className="eyebrow">Requests</p>
           <ul className="friend-list">
             {requests.map((r) => (
-              <li key={r.from_user} className="friend-row req-row">
+              <li
+                key={r.from_user}
+                className="friend-row tappable"
+                onClick={() => setViewing(r.from_user)}
+              >
                 <Avatar name={r.username} url={r.avatar_url} />
                 <span className="friend-name">@{r.username ?? "someone"}</span>
-                <span className="req-actions">
-                  <button className="btn btn-primary btn-xs" onClick={() => accept(r.from_user)}>
-                    Accept
-                  </button>
-                  <button className="btn-text btn-xs" onClick={() => decline(r.from_user)}>
-                    Decline
-                  </button>
-                </span>
+                <span className="friend-sub">wants to connect</span>
+                <span className="row-chevron">›</span>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {/* Add */}
-      <section className="block">
-        <p className="eyebrow">Add a friend</p>
-        <div className="inline-form">
-          <input
-            className="input-line"
-            value={addInput}
-            onChange={(e) => setAddInput(e.target.value)}
-            placeholder="their handle"
-            autoCapitalize="none"
-            autoCorrect="off"
-            maxLength={20}
-          />
-          <button
-            className="btn btn-primary btn-sm"
-            disabled={addBusy || !hasHandle}
-            onClick={addFriend}
-          >
-            {addBusy ? "…" : "Send"}
-          </button>
-        </div>
-        {!hasHandle && <p className="meta">Pick your own handle first.</p>}
-        {addMsg && <p className="notice">{addMsg}</p>}
-      </section>
-
       {/* Friends */}
       <section className="block">
         <p className="eyebrow">Your friends</p>
         {friends.length === 0 ? (
-          <p className="muted">No friends yet.</p>
+          <p className="muted">No friends yet. Search a handle to get started.</p>
         ) : (
           <ul className="friend-list">
             {friends.map((f) => (
-              <li key={f.id} className="friend-row">
+              <li
+                key={f.id}
+                className="friend-row tappable"
+                onClick={() => setViewing(f.id)}
+              >
                 <Avatar name={f.username} url={f.avatar_url} />
                 <span className="friend-name">@{f.username ?? "friend"}</span>
-                <button className="linkish remove" onClick={() => removeFriend(f.id)}>
-                  Remove
-                </button>
+                <span className="row-chevron">›</span>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {/* Privacy */}
+      <section className="block privacy">
+        <p className="eyebrow">Privacy &amp; data</p>
+        <p className="meta privacy-note">
+          Only your friends can see your places — and any place marked “Hidden from
+          friends” stays private. You can erase your record at any time.
+        </p>
+        {wipeConfirm ? (
+          <div className="confirm-row">
+            <span className="meta">Delete all your places &amp; stays? This can't be undone.</span>
+            <div className="req-actions">
+              <button className="btn-text remove" disabled={wiping} onClick={wipeData}>
+                {wiping ? "Deleting…" : "Delete everything"}
+              </button>
+              <button className="btn-text" disabled={wiping} onClick={() => setWipeConfirm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="linkish danger-link" onClick={() => setWipeConfirm(true)}>
+            Delete all my data
+          </button>
+        )}
+      </section>
+
+      {toast && <p className="toast">{toast}</p>}
+
+      {viewing && (
+        <ProfileView
+          userId={viewing}
+          onClose={() => setViewing(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }

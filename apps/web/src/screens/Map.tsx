@@ -3,6 +3,7 @@ import mapboxgl from "mapbox-gl";
 import { supabase } from "../lib/supabase";
 import { formatDuration } from "../lib/format";
 import { colorForName } from "../lib/avatarColor";
+import Avatar from "../components/Avatar";
 import type { Place } from "../types";
 
 interface PlaceWithStats extends Place {
@@ -357,21 +358,7 @@ export default function MapScreen() {
         <div className="sheet-backdrop" onClick={close}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="friend-place-head">
-              <span
-                className="avatar"
-                style={{ borderColor: colorForName(selFriend.username), borderWidth: 2 }}
-              >
-                {selFriend.avatar_url ? (
-                  <img src={selFriend.avatar_url} alt="" />
-                ) : (
-                  <span
-                    className="avatar-initial"
-                    style={{ color: colorForName(selFriend.username) }}
-                  >
-                    {(selFriend.username ?? "?").charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </span>
+              <Avatar name={selFriend.username} url={selFriend.avatar_url} size={52} />
               <div className="friend-place-meta">
                 <p className="sheet-place-name">{selFriend.label ?? "Unnamed spot"}</p>
                 <p className="meta">@{selFriend.username ?? "friend"}</p>
@@ -476,18 +463,11 @@ function Board({ board }: { board: LeaderRow[] | null }) {
             return (
               <li key={r.user_id} className="rank-row board-row">
                 <span className="board-person">
-                  <span
-                    className="avatar avatar-sm"
-                    style={{ borderColor: c, borderWidth: 2 }}
-                  >
-                    {r.avatar_url ? (
-                      <img src={r.avatar_url} alt="" />
-                    ) : (
-                      <span className="avatar-initial" style={{ color: c }}>
-                        {(r.is_me ? "Y" : r.name).charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </span>
+                  <Avatar
+                    name={r.is_me ? "you" : r.name}
+                    url={r.avatar_url}
+                    size={26}
+                  />
                   <span className="rank-label">{r.is_me ? "You" : `@${r.name}`}</span>
                 </span>
                 <span className="rank-time">{formatDuration(r.total_s)}</span>
