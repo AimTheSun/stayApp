@@ -4,11 +4,13 @@ import { supabase } from "../lib/supabase";
 import { formatDuration } from "../lib/format";
 import { colorForName } from "../lib/avatarColor";
 import Avatar from "../components/Avatar";
+import PlaceAlbum from "../components/PlaceAlbum";
 import type { Place } from "../types";
 
 interface PlaceWithStats extends Place {
   totalS: number;
   visits: number;
+  photoCount: number;
 }
 
 interface FriendPlace {
@@ -22,6 +24,12 @@ interface FriendPlace {
   radius_m: number;
   total_s: number;
   visits: number;
+  photo_count: number;
+}
+
+interface MyProfile {
+  username: string | null;
+  avatar_url: string | null;
 }
 
 interface LeaderRow {
@@ -60,6 +68,8 @@ export default function MapScreen() {
   const [places, setPlaces] = useState<PlaceWithStats[] | null>(null);
   const [friendPlaces, setFriendPlaces] = useState<FriendPlace[]>([]);
   const [showFriends, setShowFriends] = useState(true);
+  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
+  const [uid, setUid] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<PlaceWithStats | null>(null);
   const [selFriend, setSelFriend] = useState<FriendPlace | null>(null);
@@ -75,14 +85,29 @@ export default function MapScreen() {
   const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
-    const [placesRes, staysRes, friendsRes] = await Promise.all([
-      supabase.from("places").select("*"),
-      supabase
-        .from("stays")
-        .select("place_id, duration_s")
-        .not("left_at", "is", null),
-      supabase.rpc("friends_places"),
-    ]);
+    const { data: userData } = await supabase.auth.getUser();
+    const id = userData.user?.id ?? null;
+    setUid(id);
+
+    const [placesRes, staysRes, friendsRes, photosRes, profileRes] =
+      await Promise.all([
+        supabase.from("places").select("*"),
+        supabase
+          .from("stays")
+          .select("place_id, duration_s")
+          .not("left_at", "is", null),
+        supabase.rpc("friends_places"),
+        supabase.from("place_photos").select("place_id"),
+        id
+          ? supabase
+              .from("profiles")
+              .select("username, avatar_url")
+              .eq("id", id)
+              .single()
+          : Promise.resolve({ data: null }),
+      ]);
+
+    setMyProfile((profileRes.data as MyProfile) ?? null);
 
     const totals = new Map<string, { totalS: number; visits: number }>();
     for (const s of (staysRes.data ?? []) as {
@@ -96,11 +121,17 @@ export default function MapScreen() {
       totals.set(s.place_id, t);
     }
 
+    const photoCounts = new Map<string, number>();
+    for (const ph of (photosRes.data ?? []) as { place_id: string }[]) {
+      photoCounts.set(ph.place_id, (photoCounts.get(ph.place_id) ?? 0) + 1);
+    }
+
     setPlaces(
       ((placesRes.data ?? []) as Place[]).map((p) => ({
         ...p,
         totalS: totals.get(p.id)?.totalS ?? 0,
         visits: totals.get(p.id)?.visits ?? 0,
+        photoCount: photoCounts.get(p.id) ?? 0,
       })),
     );
 
@@ -109,6 +140,7 @@ export default function MapScreen() {
         ...f,
         total_s: Number(f.total_s),
         visits: Number(f.visits),
+        photo_count: Number(f.photo_count ?? 0),
       })),
     );
   }, []);
@@ -160,6 +192,13 @@ export default function MapScreen() {
       setReady(true);
     });
 
+    // Show name labels only when zoomed in close (otherwise: just the faces).
+    const syncLabels = () => {
+      mapEl.current?.classList.toggle("labels-on", map.getZoom() >= 14.5);
+    };
+    map.on("zoom", syncLabels);
+    map.on("load", syncLabels);
+
     return () => {
       map.remove();
       mapRef.current = null;
@@ -191,50 +230,73 @@ export default function MapScreen() {
     for (const m of markersRef.current) m.remove();
     markersRef.current = [];
 
-    // Your places — gold dots.
-    for (const p of places) {
+    // An avatar bubble marker — the only thing shown until you zoom in / tap.
+    const makeMarker = (opts: {
+      username: string | null;
+      avatarUrl: string | null;
+      label: string;
+      hasPhotos: boolean;
+      lng: number;
+      lat: number;
+      onClick: () => void;
+    }) => {
+      const color = colorForName(opts.username);
+      const initial = (opts.username ?? "?").charAt(0).toUpperCase();
+      // Always render the initial behind; overlay the photo and drop it on error.
+      const inner =
+        `<span class="mb-avatar-initial" style="color:${color}">${esc(initial)}</span>` +
+        (opts.avatarUrl
+          ? `<img src="${esc(opts.avatarUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" />`
+          : "");
       const el = document.createElement("div");
-      el.className = "mb-marker";
-      el.innerHTML =
-        '<span class="map-pin-dot"></span>' +
-        `<span class="mb-label">${esc(p.label ?? "Unnamed spot")}</span>`;
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        setSelFriend(null);
-        setSelected(p);
-        setName(p.label ?? "");
-        setRadius(Math.round(p.radius_m));
-        setHidden(!!p.hidden_from_friends);
-      });
-      markersRef.current.push(
-        new mapboxgl.Marker({ element: el, anchor: "center" })
-          .setLngLat([p.lng, p.lat])
-          .addTo(map),
-      );
-    }
-
-    // Friends' places — their avatar, ringed in their colour.
-    for (const fp of friends) {
-      const color = colorForName(fp.username);
-      const initial = (fp.username ?? "?").charAt(0).toUpperCase();
-      const inner = fp.avatar_url
-        ? `<img src="${esc(fp.avatar_url)}" alt="" />`
-        : `<span class="mb-avatar-initial" style="color:${color}">${esc(initial)}</span>`;
-      const el = document.createElement("div");
-      el.className = "mb-marker mb-marker--friend";
+      el.className = "mb-marker mb-marker--avatar" + (opts.hasPhotos ? " mb-marker--story" : "");
       el.innerHTML =
         `<span class="mb-avatar" style="border-color:${color}">${inner}</span>` +
-        `<span class="mb-label">${esc(fp.label ?? "Unnamed spot")} · @${esc(fp.username ?? "friend")}</span>`;
+        `<span class="mb-label">${esc(opts.label)}</span>`;
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        setSelected(null);
-        setSelFriend(fp);
+        opts.onClick();
       });
       markersRef.current.push(
         new mapboxgl.Marker({ element: el, anchor: "center" })
-          .setLngLat([fp.lng, fp.lat])
+          .setLngLat([opts.lng, opts.lat])
           .addTo(map),
       );
+    };
+
+    // Your places — your face.
+    for (const p of places) {
+      makeMarker({
+        username: myProfile?.username ?? "you",
+        avatarUrl: myProfile?.avatar_url ?? null,
+        label: p.label ?? "Unnamed spot",
+        hasPhotos: p.photoCount > 0,
+        lng: p.lng,
+        lat: p.lat,
+        onClick: () => {
+          setSelFriend(null);
+          setSelected(p);
+          setName(p.label ?? "");
+          setRadius(Math.round(p.radius_m));
+          setHidden(!!p.hidden_from_friends);
+        },
+      });
+    }
+
+    // Friends' places — their face.
+    for (const fp of friends) {
+      makeMarker({
+        username: fp.username,
+        avatarUrl: fp.avatar_url,
+        label: `${fp.label ?? "Unnamed spot"} · @${fp.username ?? "friend"}`,
+        hasPhotos: fp.photo_count > 0,
+        lng: fp.lng,
+        lat: fp.lat,
+        onClick: () => {
+          setSelected(null);
+          setSelFriend(fp);
+        },
+      });
     }
 
     // Frame everything currently shown.
@@ -249,7 +311,7 @@ export default function MapScreen() {
       for (const p of pts) b.extend(p);
       map.fitBounds(b, { padding: 64, maxZoom: 16, duration: 600 });
     }
-  }, [places, friendPlaces, showFriends, ready]);
+  }, [places, friendPlaces, showFriends, ready, myProfile]);
 
   // Load the friends-only leaderboard for whichever place is open.
   const target = selected
@@ -372,6 +434,8 @@ export default function MapScreen() {
 
             <Board board={board} />
 
+            <PlaceAlbum placeId={selFriend.place_id} canAdd={false} uid={uid} />
+
             <div className="sheet-actions">
               <button className="btn btn-primary" onClick={close}>
                 Done
@@ -400,6 +464,8 @@ export default function MapScreen() {
             />
 
             <Board board={board} />
+
+            <PlaceAlbum placeId={selected.id} canAdd={true} uid={uid} />
 
             <label className="sheet-radius">
               <span className="sheet-radius-label">
